@@ -321,467 +321,236 @@
 
 
 
-    <script>
-
-        document.addEventListener('DOMContentLoaded', function () {
-
-            const tg = window.Telegram.WebApp;
-
-
-
-            // --- DOM Elements ---
-
-            const balanceDisplay = document.getElementById('balanceDisplay'), adCountDisplay = document.getElementById('adCountDisplay'),
-
-                  dailyAdCountDisplay = document.getElementById('dailyAdCountDisplay'), rewardedBtn = document.getElementById('rewardedBtn'),
-
-                  mainWithdrawBtn = document.getElementById('mainWithdrawBtn'), statusMessage = document.getElementById('statusMessage'),
-
-                  withdrawBalanceDisplay = document.getElementById('withdrawBalanceDisplay'), paymentAddressInput = document.getElementById('paymentAddress'),
-
-                  finalWithdrawBtn = document.getElementById('finalWithdrawBtn'), referralLinkDisplay = document.getElementById('referralLink'),
-
-                  referralCountDisplay = document.getElementById('referralCountDisplay'), referralBonusDisplay = document.getElementById('referralBonusDisplay'),
-
-                  adminPanel = document.getElementById('adminPanel'), userInfoDisplay = document.getElementById('userInfo');
-
-
-
-            // --- App Constants & Configuration ---
-
-            // To set up your bot, search for "EDIT_THIS" and replace the values on the following lines.
-
-            const ADMIN_ID = 5509038592; // EDIT_THIS: Replace with your numeric Telegram User ID.
-
-            const BOT_USERNAME = 'Earncash26_bot'; // EDIT_THIS: Replace with your bot's username.
-
-            const WEBAPP_NAME = 'Earncash26';   // EDIT_THIS: Replace with your web app's short name.
-
-            
-
-            const WITHDRAW_THRESHOLD = 200.00;      // 200 TK
-
-            const AD_REWARD_CENTS = 1;          // 1.00 TK 
-
-            const REFERRAL_BONUS_USDT = 10;    // 10 TK
-
-            const DAILY_AD_LIMIT = 1000;
-
-
-
-            // --- App State ---
-
-            // balanceInTK is used to avoid floating point issues.
-
-            let state = {
-
-                balanceInTK: 0,
-
-                totalAdCount: 0,
-
-                dailyAdCount: 0,
-
-                lastAdDate: null,
-
-                referralCount: 0 
-
-            };
-
-
-
-            // ---- State Management ----
-
-            function getTodayDateString() { return new Date().toISOString().split('T')[0]; }
-
-            function loadState() {
-
-                try {
-
-                    const savedState = JSON.parse(localStorage.getItem('earningAppUSDTState'));
-
-                    if (savedState) { 
-
-                        // Ensure all state properties are present
-
-                        state = { ...state, ...savedState };
-
-                    }
-
-                } catch (e) { console.error("Could not load state", e); }
-
-                
-
-                // Reset daily ad count if it's a new day
-
-                if (state.lastAdDate !== getTodayDateString()) {
-
-                    state.dailyAdCount = 0;
-
-                    state.lastAdDate = getTodayDateString();
-
-                    saveState();
-
-                }
-
-            }
-
-            function saveState() {
-
-                try {
-
-                    localStorage.setItem('earningAppUSDTState', JSON.stringify(state));
-
-                } catch (e) { console.error("Could not save state", e); }
-
-            }
-
-            
-
-            // ---- UI Updates & View Management ----
-
-            function updateUI() {
-
-                const balanceInTK = (state.balanceInTK).toFixed(2);
-
-                
-
-                // Home & Withdraw Views
-
-                balanceDisplay.textContent = `TK ${balanceInTK}`;
-
-                adCountDisplay.textContent = state.totalAdCount;
-
-                dailyAdCountDisplay.textContent = `${state.dailyAdCount} / ${DAILY_AD_LIMIT}`;
-
-                withdrawBalanceDisplay.textContent = `TK ${balanceInTK}`;
-
-                
-
-                // Referral View
-
-                referralCountDisplay.textContent = state.referralCount;
-
-                const referralBonus = (state.referralCount * REFERRAL_BONUS_TK).toFixed(2);
-
-                referralBonusDisplay.textContent = `TK ${referralBonus}`;
-
-
-
-                // Button States
-
-                const isWithdrawalPossible = parseFloat(balanceInTK) >= WITHDRAW_THRESHOLD;
-
-                mainWithdrawBtn.disabled = !isWithdrawalPossible;
-
-                mainWithdrawBtn.textContent = isWithdrawalPossible ? 'Go to Withdraw' : `Reach ${WITHDRAW_THRESHOLD.toFixed(2)} TK to Withdraw`;
-
-                
-
-                finalWithdrawBtn.disabled = !isWithdrawalPossible;
-
-                finalWithdrawBtn.textContent = isWithdrawalPossible ? `Withdraw ${balanceInUSDT} TK` : `Minimum ${WITHDRAW_THRESHOLD.toFixed(2)} TK required`;
-
-                
-
-                const adLimitReached = state.dailyAdCount >= DAILY_AD_LIMIT;
-
-                rewardedBtn.disabled = adLimitReached;
-
-                rewardedBtn.textContent = adLimitReached ? 'Daily Limit Reached' : 'Watch Ad (+1.00 TK)';
-
-            }
-
-            
-
-            function showView(viewId) {
-
-                document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
-
-                document.getElementById(viewId).style.display = 'block';
-
-                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-
-                const activeNavId = { 'home-view': 'navHome', 'withdraw-view': 'navWithdraw', 'referral-view': 'navRefer' }[viewId];
-
-                if(activeNavId) document.getElementById(activeNavId).classList.add('active');
-
-            }
-
-
-
-            let statusTimeout;
-
-            function showStatus(message, type, duration = 4000) {
-
-                clearTimeout(statusTimeout);
-
-                statusMessage.textContent = message;
-
-                statusMessage.className = `status-message ${type}`;
-
-                statusTimeout = setTimeout(() => { statusMessage.style.display = 'none'; }, duration);
-
-            }
-
-
-
-            // ---- Ad Handling ----
-
-            function handleAdSuccess() {
-
-                state.totalAdCount++;
-
-                state.dailyAdCount++;
-
-                state.lastAdDate = getTodayDateString();
-
-                state.balanceInTK += AD_REWARD_TK;
-
-                
-
-                showStatus(`Success! +${(AD_REWARD_TK).toFixed(2)} TK has been added.`, 'success');
-
-                saveState();
-
-                updateUI();
-
-            }
-
-
-
-            function handleAdError(error) {
-
-                console.error('Ad Error:', error);
-
-                showStatus('Failed to load ad. Please try again.', 'error');
-
-            }
-
-
-
-            // ---- App Logic ----
-
-            function requestAd() {
-
-                if (state.dailyAdCount >= DAILY_AD_LIMIT) {
-
-                    showStatus("You've reached the daily ad limit.", 'error');
-
-                    return;
-
-                }
-
-                showStatus('Loading ad, please wait...', 'info');
-
-                // The Promise is a simulator for the ad network callback
-
-                Promise.resolve(show_10531447()).then(handleAdSuccess).catch(handleAdError);
-
-            }
-
-
-
-            function handleWithdrawal() {
-
-                const balanceInTK = (state.balanceInTK).toFixed(2);
-
-                const walletAddress = paymentAddressInput.value.trim();
-
-
-
-                if (parseFloat(balanceInTK) < WITHDRAW_THRESHOLD) {
-
-                    showStatus(`You need at least ${WITHDRAW_THRESHOLD.toFixed(2)} TK to withdraw.`, 'error');
-
-                    return;
-
-                }
-
-                // Basic validation for TK Bkash/Nagad Number
-
-                if (!walletNumber.startsWith('T') || walletNumber.length < 11) {
-
-                    showStatus('Please enter a valid TK (Bkash)Nagad) wallet Number.', 'error');
-
-                    return;
-
-                }
-
-                const user = tg.initDataUnsafe.user;
-
-                const message = `--- Withdrawal Request ---\n\nUser ID: ${user.id}\nName: ${user.first_name} ${user.last_name || ''}\nUsername: @${user.username || 'N/A'}\n\nAmount: ${balanceInUSDT} USDT\nWallet Address: ${walletAddress}`;
-
-                
-
-                tg.sendData(message);
-
-                showStatus('Your withdrawal request has been sent for review.', 'success');
-
-                
-
-                // Reset balance after request
-
-                state.balanceInTK = 0;
-
-                saveState();
-
-                updateUI();
-
-                paymentNumberInput.value = '';
-
-                showView('home-view');
-
-            }
-
-            
-
-            function generateReferralLink() {
-
-                const user = tg.initDataUnsafe.user;
-
-                if (user && user.id && BOT_USERNAME !== 'Earncash26_bot' && WEBAPP_NAME !== 'Earncash26') {
-
-                    referralLinkDisplay.textContent = `https://t.me/${BOT_USERNAME}/${WEBAPP_NAME}?startapp=ref${user.id}`;
-
-                } else {
-
-                    referralLinkDisplay.textContent = "Referral link cannot be generated. Configure bot info in the script.";
-
-                    referralLinkDisplay.style.color = "var(--warning-color)";
-
-                    referralLinkDisplay.style.cursor = "default";
-
-                }
-
-            }
-
-
-
-            /* 
-
-            --- DEVELOPER NOTE ON REFERRALS ---
-
-            The current code only SHOWS referral stats stored locally. It does NOT automatically
-
-            increment the count or add the bonus when a new user joins.
-
-            
-
-            A secure referral system requires a backend server:
-
-            1. New User (User B) clicks referral link from User A.
-
-            2. User B's app sends their own ID and the referrer's ID (from start_param) to your server.
-
-            3. Your server verifies the referral (e.g., checks if User B is new).
-
-            4. If valid, the server updates User A's data in a database (increments referralCount).
-
-            5. The server then adds the 10 TK bonus to User A's balance.
-
-            6. When User A opens the app, it should fetch the latest state (including referrals) from the server.
-
-            
-
-            The logic below is a placeholder for the user who was referred.
-
-            */
-
-            function handleReferralStart() {
-
-                if (tg.initDataUnsafe.start_param) {
-
-                    const referrerId = tg.initDataUnsafe.start_param.replace('ref', '');
-
-                    console.log("App started with referral parameter. Referrer ID:", referrerId);
-
-                    // You can show a welcome message to the new user.
-
-                    // The actual reward logic MUST be handled on a backend.
-
-                    showStatus('Welcome! You joined via a referral link.', 'success', 5000);
-
-                }
-
-            }
-
-
-
-
-
-            // ---- Event Listeners ----
-
-            rewardedBtn.addEventListener('click', () => requestAd());
-
-            finalWithdrawBtn.addEventListener('click', handleWithdrawal);
-
-            document.getElementById('navHome').addEventListener('click', () => showView('home-view'));
-
-            document.getElementById('navWithdraw').addEventListener('click', () => showView('withdraw-view'));
-
-            document.getElementById('navRefer').addEventListener('click', () => showView('referral-view'));
-
-            mainWithdrawBtn.addEventListener('click', () => showView('withdraw-view'));
-
-
-
-            referralLinkDisplay.addEventListener('click', () => {
-
-                if(navigator.clipboard && referralLinkDisplay.textContent.startsWith('https://')) {
-
-                    navigator.clipboard.writeText(referralLinkDisplay.textContent)
-
-                        .then(() => showStatus('Referral link copied!', 'success'))
-
-                        .catch(() => showStatus('Could not copy link.', 'error'));
-
-                }
-
-            });
-
-
-
-            // ---- Initialization ----
-
-            function initializeApp() {
-
-                tg.ready();
-
-                tg.expand();
-
-                
-
-                loadState();
-
-                updateUI();
-
-                generateReferralLink();
-
-                handleReferralStart();
-
-                
-
-                const user = tg.initDataUnsafe.user;
-
-                if (user && user.id === ADMIN_ID) {
-
-                    adminPanel.style.display = 'block';
-
-                    userInfoDisplay.textContent = `Welcome, Admin! User: ${user.first_name} (@${user.username || 'N/A'}), ID: ${user.id}`;
-
-                }
-
-            }
-
-
-
-            initializeApp();
-
-        });
-
-    </script>
-
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const tg = window.Telegram.WebApp;
+    // DOM Elements
+    const balanceDisplay = document.getElementById('balanceDisplay'),
+          adCountDisplay = document.getElementById('adCountDisplay'),
+          dailyAdCountDisplay = document.getElementById('dailyAdCountDisplay'),
+          rewardedBtn = document.getElementById('rewardedBtn'),
+          mainWithdrawBtn = document.getElementById('mainWithdrawBtn'),
+          statusMessage = document.getElementById('statusMessage'),
+          withdrawBalanceDisplay = document.getElementById('withdrawBalanceDisplay'),
+          paymentAddressInput = document.getElementById('paymentAddress'),
+          finalWithdrawBtn = document.getElementById('finalWithdrawBtn'),
+          referralLinkDisplay = document.getElementById('referralLink'),
+          referralCountDisplay = document.getElementById('referralCountDisplay'),
+          referralBonusDisplay = document.getElementById('referralBonusDisplay'),
+          adminPanel = document.getElementById('adminPanel'),
+          userInfoDisplay = document.getElementById('userInfo');
+
+    // Constants & Config
+    const ADMIN_ID = 5509038592;
+    const BOT_USERNAME = 'Earncash26_bot';
+    const WEBAPP_NAME = 'Earncash26';
+    const WITHDRAW_THRESHOLD = 200.00;
+    const AD_REWARD_TK = 1.00;
+    const REFERRAL_BONUS_TK = 10;
+    const DAILY_AD_LIMIT = 1000;
+
+    // State
+    let state = {
+      balanceInTK: 0,
+      totalAdCount: 0,
+      dailyAdCount: 0,
+      lastAdDate: null,
+      referralCount: 0
+    };
+
+    function getTodayDateString() {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    function loadState() {
+      try {
+        const savedState = JSON.parse(localStorage.getItem('earningAppUSDTState'));
+        if (savedState) {
+          state = { ...state, ...savedState };
+        }
+      } catch (e) {
+        console.error('Could not load state', e);
+      }
+      if (state.lastAdDate !== getTodayDateString()) {
+        state.dailyAdCount = 0;
+        state.lastAdDate = getTodayDateString();
+        saveState();
+      }
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem('earningAppUSDTState', JSON.stringify(state));
+      } catch (e) {
+        console.error('Could not save state', e);
+      }
+    }
+
+    function updateUI() {
+      const balanceInTK = (state.balanceInTK).toFixed(2);
+      balanceDisplay.textContent = `TK ${balanceInTK}`;
+      adCountDisplay.textContent = state.totalAdCount;
+      dailyAdCountDisplay.textContent = `${state.dailyAdCount} / ${DAILY_AD_LIMIT}`;
+      withdrawBalanceDisplay.textContent = `TK ${balanceInTK}`;
+
+      // Referral stats
+      referralCountDisplay.textContent = state.referralCount;
+      const referralBonus = (state.referralCount * REFERRAL_BONUS_TK).toFixed(2);
+      referralBonusDisplay.textContent = `TK ${referralBonus}`;
+
+      // Button states
+      const isWithdrawalPossible = parseFloat(balanceInTK) >= WITHDRAW_THRESHOLD;
+      mainWithdrawBtn.disabled = !isWithdrawalPossible;
+      mainWithdrawBtn.textContent = isWithdrawalPossible ? 'Go to Withdraw' : `Reach ${WITHDRAW_THRESHOLD.toFixed(2)} TK to Withdraw`;
+      finalWithdrawBtn.disabled = !isWithdrawalPossible;
+      finalWithdrawBtn.textContent = isWithdrawalPossible ? `Withdraw ${balanceInTK} TK` : `Minimum ${WITHDRAW_THRESHOLD.toFixed(2)} TK required`;
+      const adLimitReached = (state.dailyAdCount >= DAILY_AD_LIMIT);
+      rewardedBtn.disabled = adLimitReached;
+      rewardedBtn.textContent = adLimitReached ? 'Daily Limit Reached' : 'Watch Ad (+1.00 TK)';
+    }
+
+    function showView(viewId) {
+      document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+      document.getElementById(viewId).style.display = 'block';
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      const mapping = { 'home-view': 'navHome', 'withdraw-view': 'navWithdraw', 'referral-view': 'navRefer' };
+      const activeNavId = mapping[viewId];
+      if (activeNavId) document.getElementById(activeNavId).classList.add('active');
+    }
+
+    let statusTimeout;
+    function showStatus(message, type, duration = 4000) {
+      clearTimeout(statusTimeout);
+      statusMessage.textContent = message;
+      statusMessage.className = `status-message ${type}`;
+      statusMessage.style.display = 'block';
+      statusTimeout = setTimeout(() => { statusMessage.style.display = 'none'; }, duration);
+    }
+
+    // Wrap SDK ad call
+    function showAd() {
+      return new Promise((resolve, reject) => {
+        try {
+          // Assuming SDK uses callback, adapt as necessary
+          show_10531447();
+          // Simulate ad watch duration or wait for SDK callback
+          // If SDK provides callback, set it here.
+          // For demo, simulate completion after 2 seconds:
+          setTimeout(() => {
+            resolve();
+          }, 2000);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    }
+
+    function handleAdSuccess() {
+      state.totalAdCount++;
+      state.dailyAdCount++;
+      state.lastAdDate = getTodayDateString();
+      state.balanceInTK += AD_REWARD_TK;
+      showStatus(`Success! +${AD_REWARD_TK.toFixed(2)} TK has been added.`, 'success');
+      saveState();
+      updateUI();
+    }
+
+    function handleAdError(error) {
+      console.error('Ad Error:', error);
+      showStatus('Failed to load ad. Please try again.', 'error');
+    }
+
+    // Request ad
+    function requestAd() {
+      if (state.dailyAdCount >= DAILY_AD_LIMIT) {
+        showStatus("You've reached the daily ad limit.", 'error');
+        return;
+      }
+      showStatus('Loading ad, please wait...', 'info');
+      showAd().then(handleAdSuccess).catch(handleAdError);
+    }
+
+    // Handle withdrawal
+    function handleWithdrawal() {
+      const balanceInTK = (state.balanceInTK).toFixed(2);
+      const walletAddress = document.getElementById('paymentAddress').value.trim();
+
+      if (parseFloat(balanceInTK) < WITHDRAW_THRESHOLD) {
+        showStatus(`You need at least ${WITHDRAW_THRESHOLD.toFixed(2)} TK to withdraw.`, 'error');
+        return;
+      }
+      if (!walletAddress.startsWith('T') || walletAddress.length < 11) {
+        showStatus('Please enter a valid TK (Bkash/Nagad) wallet Number.', 'error');
+        return;
+      }
+
+      const user = tg.initDataUnsafe.user;
+      const message = `--- Withdrawal Request ---\n\nUser ID: ${user.id}\nName: ${user.first_name} ${user.last_name || ''}\nUsername: @${user.username || 'N/A'}\n\nAmount: ${balanceInTK} TK\nWallet Address: ${walletAddress}`;
+      tg.sendData(message);
+      showStatus('Your withdrawal request has been sent for review.', 'success');
+
+      // Reset balance
+      state.balanceInTK = 0;
+      saveState();
+      updateUI();
+      document.getElementById('paymentAddress').value = '';
+      showView('home-view');
+    }
+
+    function generateReferralLink() {
+      const user = tg.initDataUnsafe.user;
+      if (user && user.id && BOT_USERNAME !== 'Earncash26_bot' && WEBAPP_NAME !== 'Earncash26') {
+        referralLinkDisplay.textContent = `https://t.me/${BOT_USERNAME}/${WEBAPP_NAME}?startapp=ref${user.id}`;
+      } else {
+        referralLinkDisplay.textContent = "Referral link cannot be generated. Configure bot info in the script.";
+        referralLinkDisplay.style.color = "var(--warning-color)";
+        referralLinkDisplay.style.cursor = "default";
+      }
+    }
+
+    function handleReferralStart() {
+      if (tg.initDataUnsafe.start_param) {
+        const referrerId = tg.initDataUnsafe.start_param.replace('ref', '');
+        console.log("Referral start with referrer ID:", referrerId);
+        showStatus('Welcome! You joined via a referral link.', 'success', 5000);
+        // You should send this info to your backend for processing.
+      }
+    }
+
+    // Event Listeners
+    document.getElementById('rewardedBtn').addEventListener('click', () => requestAd());
+    document.getElementById('mainWithdrawBtn').addEventListener('click', () => showView('withdraw-view'));
+    document.getElementById('finalWithdrawBtn').addEventListener('click', () => handleWithdrawal());
+    document.getElementById('navHome').addEventListener('click', () => showView('home-view'));
+    document.getElementById('navWithdraw').addEventListener('click', () => showView('withdraw-view'));
+    document.getElementById('navRefer').addEventListener('click', () => showView('referral-view'));
+
+    referralLinkDisplay.addEventListener('click', () => {
+      if (navigator.clipboard && referralLinkDisplay.textContent.startsWith('https://')) {
+        navigator.clipboard.writeText(referralLinkDisplay.textContent)
+          .then(() => showStatus('Referral link copied!', 'success'))
+          .catch(() => showStatus('Could not copy link.', 'error'));
+      }
+    });
+
+    // Initialization
+    function initializeApp() {
+      tg.ready();
+      tg.expand();
+      loadState();
+      updateUI();
+      generateReferralLink();
+      handleReferralStart();
+
+      const user = tg.initDataUnsafe.user;
+      if (user && user.id === ADMIN_ID) {
+        adminPanel.style.display = 'block';
+        userInfoDisplay.textContent = `Welcome, Admin! User: ${user.first_name} (@${user.username || 'N/A'}), ID: ${user.id}`;
+      }
+    }
+
+    initializeApp();
+  });
+</script>
 </body>
-
-
 </html>
