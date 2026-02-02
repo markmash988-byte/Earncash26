@@ -14,6 +14,10 @@
 
 <script src='//libtl.com/sdk.js' data-zone='10531447' data-sdk='show_10531447'></script>
 
+<!-- Firebase SDKs (modular) -->
+<script src="https://www.gstatic.com/firebasejs/9.21.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.21.0/firebase-firestore.js"></script>
+
 
     <!-- 2. Telegram Web App Script -->
 
@@ -301,7 +305,11 @@
 
         <div class="status-message" id="statusMessage"></div>
 
-        <div class="admin-panel" id="adminPanel"><h3>👑 Admin Panel</h3><p id="userInfo"></p></div>
+        <<div class="admin-panel" id="adminPanel" style="display:none;">
+  <h3>👑 Admin Panel</h3>
+  <p id="userInfo"></p>
+  <button id="resetStatsBtn" class="btn" style="margin-top:10px;">Reset Stats</button>
+</div>
 
     </div>
 
@@ -339,9 +347,21 @@
           referralBonusDisplay = document.getElementById('referralBonusDisplay'),
           adminPanel = document.getElementById('adminPanel'),
           userInfoDisplay = document.getElementById('userInfo');
+      // Initialize Firebase
+  const firebaseConfig = {
+      apiKey: "AIzaSyDe7c3sDCZjREuisSvzp9D873LD_il3t6s",
+      authDomain: "earning-bot-30c31.firebaseapp.com",
+      databaseURL: "https://earning-bot-30c31-default-rtdb.firebaseio.com",
+      projectId: "earning-bot-30c31",
+      storageBucket: "earning-bot-30c31.firebasestorage.app",
+      messagingSenderId: "69129900595",
+      appId: "1:69129900595:web:3ea7bcfc69aa06ced80946"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
     // Constants & Config
-    const ADMIN_ID = 5509038592;
+    const ADMIN_ID = 4w0PvAHOlJOdjBHabGPBs7zpIsb2;
     const BOT_USERNAME = 'Earncash26_bot';
     const WEBAPP_NAME = 'Earncash26';
     const WITHDRAW_THRESHOLD = 200.00;
@@ -532,24 +552,58 @@
           .catch(() => showStatus('Could not copy link.', 'error'));
       }
     });
-
-    // Initialization
-    function initializeApp() {
-      tg.ready();
-      tg.expand();
-      loadState();
-      updateUI();
-      generateReferralLink();
-      handleReferralStart();
-
-      const user = tg.initDataUnsafe.user;
-      if (user && user.id === ADMIN_ID) {
-        adminPanel.style.display = 'block';
-        userInfoDisplay.textContent = `Welcome, Admin! User: ${user.first_name} (@${user.username || 'N/A'}), ID: ${user.id}`;
-      }
+ // Reset stats handler for admin
+document.getElementById('resetStatsBtn').onclick = async () => {
+  try {
+    await db.collection('stats').doc('activity').set({
+      totalAdsWatched: 0,
+      totalReferrals: 0,
+      totalBalance: 0,
+      totalWithdrawals: 0,
+      lastAdDate: null,
+      dailyAdCount: 0
+    });
+    // Reload admin stats
+    await loadAdminStats();
+    showStatus('Stats reset successfully', 'success');
+  } catch(e) {
+    console.error('Error resetting stats:', e);
+    showStatus('Failed to reset stats', 'error');
+  }
+};
+  async function loadAdminStats() {
+  try {
+    const snap = await db.collection('stats').doc('activity').get();
+    if (snap.exists) {
+      const data = snap.data();
+      document.getElementById('userInfo').textContent = `Welcome, Admin!`;
+      document.getElementById('adminTotalAds').textContent = data.totalAdsWatched || 0;
+      document.getElementById('adminTotalWithdrawals').textContent = data.totalWithdrawals || 0;
+      document.getElementById('adminTotalReferrals').textContent = data.totalReferrals || 0;
+      document.getElementById('adminTotalBalance').textContent = `TK ${(data.totalBalance || 0).toFixed(2)}`;
     }
+  } catch (e) {
+    console.error("Error loading admin stats:", e);
+  }
+}
+// Initialization
+function initializeApp() {
+  tg.ready();
+  tg.expand();
+  loadState();
+  updateUI();
+  generateReferralLink();
+  handleReferralStart();
 
-    initializeApp();
+  const user = tg.initDataUnsafe.user;
+  if (user && user.id === 4w0PvAHOlJOdjBHabGPBs7zpIsb2) {
+    // Show admin panel
+    document.getElementById('adminPanel').style.display = 'block';
+    // Load admin stats from Firestore
+    loadAdminStats();
+  }
+}
+initializeApp();
   });
 </script>
 </body>
